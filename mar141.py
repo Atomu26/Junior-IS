@@ -87,9 +87,32 @@ class PNGtoMP4App:
     def __init__(self, root):
         self.root = root
         self.root.title("Sequence of PNG to MP4 Merger")
-        self.root.geometry("800x600")
+        #self.root.geometry("800x600")
 
-         # Add icon 
+        # Create a  scrollbar
+        self.canvas_frame = tk.Frame(root)
+        self.canvas_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.canvas = tk.Canvas(self.canvas_frame, borderwidth=0)
+        self.scrollbar = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion=self.canvas.bbox("all")
+            )
+        )
+
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+
+
+
+         # Icon 
         try:
             icon = Image.open('360p.png')  
             photo = ImageTk.PhotoImage(icon)
@@ -113,46 +136,46 @@ class PNGtoMP4App:
         self.layer_frames = []  # Frames for each layer's UI
 
         # Output and FPS
-        tk.Label(root, text="Output Video File:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
-        tk.Entry(root, textvariable=self.output_video, width=40).grid(row=0, column=1, padx=10, pady=10)
-        tk.Button(root, text="Browse", command=self.browse_output).grid(row=0, column=2, padx=10, pady=10)
+        tk.Label(self.scrollable_frame, text="Output Video File:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        tk.Entry(self.scrollable_frame, textvariable=self.output_video, width=40).grid(row=0, column=1, padx=10, pady=10)
+        tk.Button(self.scrollable_frame, text="Browse", command=self.browse_output).grid(row=0, column=2, padx=10, pady=10)
 
-        tk.Label(root, text="FPS:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
-        tk.Entry(root, textvariable=self.fps, width=10).grid(row=1, column=1, padx=10, pady=10, sticky="w")
+        tk.Label(self.scrollable_frame, text="FPS:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
+        tk.Entry(self.scrollable_frame, textvariable=self.fps, width=10).grid(row=1, column=1, padx=10, pady=10, sticky="w")
 
         # Blur and Fog Effects
-        tk.Label(root, text="Blur Amount:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
-        self.blur_slider = ttk.Scale(root, from_=0, to=10, orient=tk.HORIZONTAL, variable=self.blur_amount)
+        tk.Label(self.scrollable_frame, text="Blur Amount:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
+        self.blur_slider = ttk.Scale(self.scrollable_frame, from_=0, to=10, orient=tk.HORIZONTAL, variable=self.blur_amount)
         self.blur_slider.grid(row=2, column=1, padx=10, pady=10, sticky="w")
 
-        tk.Label(root, text="Blur Layers:").grid(row=2, column=2, padx=10, pady=10, sticky="w")
-        self.blur_layer_listbox = tk.Listbox(root, selectmode=tk.MULTIPLE)
+        tk.Label(self.scrollable_frame, text="Blur Layers:").grid(row=2, column=2, padx=10, pady=10, sticky="w")
+        self.blur_layer_listbox = tk.Listbox(self.scrollable_frame, selectmode=tk.MULTIPLE)
         self.blur_layer_listbox.grid(row=2, column=3, padx=10, pady=10, sticky="w")
 
-        tk.Label(root, text="Fog Amount:").grid(row=3, column=0, padx=10, pady=10, sticky="w")
-        self.fog_slider = ttk.Scale(root, from_=0, to=255, orient=tk.HORIZONTAL, variable=self.fog_amount)
+        tk.Label(self.scrollable_frame, text="Fog Amount:").grid(row=3, column=0, padx=10, pady=10, sticky="w")
+        self.fog_slider = ttk.Scale(self.scrollable_frame, from_=0, to=255, orient=tk.HORIZONTAL, variable=self.fog_amount)
         self.fog_slider.grid(row=3, column=1, padx=10, pady=10, sticky="w")
 
-        tk.Label(root, text="Fog Layers:").grid(row=3, column=2, padx=10, pady=10, sticky="w")
-        self.fog_layer_listbox = tk.Listbox(root, selectmode=tk.MULTIPLE)
+        tk.Label(self.scrollable_frame, text="Fog Layers:").grid(row=3, column=2, padx=10, pady=10, sticky="w")
+        self.fog_layer_listbox = tk.Listbox(self.scrollable_frame, selectmode=tk.MULTIPLE)
         self.fog_layer_listbox.grid(row=3, column=3, padx=10, pady=10, sticky="w")
 
         # Progress Bar
-        self.progress = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate")
+        self.progress = ttk.Progressbar(self.scrollable_frame, orient="horizontal", length=400, mode="determinate")
         self.progress.grid(row=4, column=0, columnspan=3, padx=10, pady=20)
 
         # Merge Button
-        tk.Button(root, text="Merge and Create Video", command=self.start_merge).grid(row=5, column=0, columnspan=3, pady=10)
+        tk.Button(self.scrollable_frame, text="Merge and Create Video", command=self.start_merge).grid(row=5, column=0, columnspan=3, pady=10)
 
         # Timeline and Preview
-        self.timeline_frame = tk.Frame(root)
+        self.timeline_frame = tk.Frame(self.scrollable_frame)
         self.timeline_frame.grid(row=6, column=0, columnspan=3, padx=10, pady=10)
         self.timeline_label = tk.Label(self.timeline_frame, text="Timeline:")
         self.timeline_label.pack(side=tk.LEFT)
         self.timeline_slider = ttk.Scale(self.timeline_frame, from_=0, to=100, orient=tk.HORIZONTAL, command=self.update_preview)
         self.timeline_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        self.preview_frame = tk.Frame(root)
+        self.preview_frame = tk.Frame(self.scrollable_frame)
         self.preview_frame.grid(row=7, column=0, columnspan=3, padx=10, pady=10)
         self.preview_label = tk.Label(self.preview_frame, text="Preview:")
         self.preview_label.pack()
@@ -160,23 +183,31 @@ class PNGtoMP4App:
         self.preview_canvas.pack()
 
         # Play/Pause Button
-        self.play_button = tk.Button(root, text="Play", command=self.toggle_play)
+        self.play_button = tk.Button(self.scrollable_frame, text="Play", command=self.toggle_play)
         self.play_button.grid(row=8, column=0, columnspan=3, pady=10)
 
         # Add/Remove Layer Buttons
-        self.add_layer_button = tk.Button(root, text="Add Layer", command=self.add_layer_ui)
+        self.add_layer_button = tk.Button(self.scrollable_frame, text="Add Layer", command=self.add_layer_ui)
         self.add_layer_button.grid(row=9, column=0, pady=10)
-        self.remove_layer_button = tk.Button(root, text="Remove Layer", command=self.remove_layer_ui)
+        self.remove_layer_button = tk.Button(self.scrollable_frame, text="Remove Layer", command=self.remove_layer_ui)
         self.remove_layer_button.grid(row=9, column=1, pady=10)
 
         # Add initial layers (Layer 1 and Layer 2)
         self.add_layer_ui()
         self.add_layer_ui()
+        self.bind_mousewheel()
+
+        
+    def bind_mousewheel(self): # Scroll using mouse 
+        def _on_mousewheel(event):
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
 
     def add_layer_ui(self):
         """Add a new layer UI to the interface."""
         layer_index = len(self.layers) + 1
-        layer_frame = tk.Frame(self.root)
+        layer_frame = tk.Frame(self.scrollable_frame)
         layer_frame.grid(row=10 + len(self.layers), column=0, columnspan=3, padx=10, pady=10)
 
         tk.Label(layer_frame, text=f"Layer {layer_index} (Folder or PNG):").grid(row=0, column=0, padx=10, pady=10, sticky="w")
