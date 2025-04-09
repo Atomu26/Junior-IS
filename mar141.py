@@ -86,7 +86,7 @@ def merge_layers(layers, output_video, fps=30, blur_amount=0, fog_amount=0, blur
 class PNGtoMP4App:
     def __init__(self, root):
         self.root = root
-        self.root.title("Sequence of PNG to MP4 Merger")
+        self.root.title("EasyCompositer")
         #self.root.geometry("800x600")
 
         # Create a  scrollbar
