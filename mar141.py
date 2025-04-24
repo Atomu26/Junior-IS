@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+import time
 from PIL import Image, ImageTk, ImageFilter
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -306,9 +307,18 @@ class PNGtoMP4App:
             self.timeline_slider.config(to=len(self.merged_images) - 1)
             self.update_preview()
 
+            # Start timing
+            start_time = time.time()
+
             # Merge and create video
             merge_layers(layers, output_video, fps, blur_amount, fog_amount, blur_layers, fog_layers, update_progress)
-            messagebox.showinfo("Success", "Video created successfully!")
+            
+            # Calculate rendering time
+            end_time = time.time()
+            render_time = end_time - start_time
+
+            # Show success message with rendering time
+            messagebox.showinfo("Success", f"Video created successfully!\nRendering Time: {render_time:.2f} seconds")
             self.progress["value"] = 0
         except Exception as e:
             messagebox.showerror("Error", str(e))
