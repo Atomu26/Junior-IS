@@ -14,3 +14,8 @@ Second version that uses FFmpeg with single-threading, resulting in faster rende
 
 - mar143.py :
 Third version using FFmpeg with multi-threading, resulting in faster rendering performance compared to the second version. 
+
+
+## Other files
+
+- 360p.png : Image file of the software's logo.
