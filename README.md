@@ -10,7 +10,7 @@ The background (e.g., environment or scener) can be rendered once, while the for
 First version using OpenCV to process and encode the final MP4 video from the combined PNG frames.
 
 - mar142.py :
-Improved version that uses FFmpeg with single-threading.
+Improved version that uses FFmpeg with single-threading, resulting in faster rendering performance.
 
 - mar143.py :
 Improved version using FFmpeg with multi-threading, resulting in faster rendering performance.
