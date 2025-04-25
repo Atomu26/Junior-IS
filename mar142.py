@@ -1,10 +1,14 @@
 import os
-import cv2
-import numpy as np
-import time
-from PIL import Image, ImageTk, ImageFilter
+import shutil
+import subprocess
+from PIL import Image, ImageFilter, ImageTk  # Also added ImageTk since it's used in the code
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox
+from tkinter import ttk as ttk
+from tkinter import filedialog  # Add this import
+from tqdm import tqdm
+import time  # Add this for the render time calculation
+
 
 def apply_blur(image, blur_amount):
     """
@@ -25,64 +29,72 @@ def apply_fog(image, fog_amount):
     fog = Image.new("RGBA", image.size, (255, 255, 255, fog_amount))
     return Image.alpha_composite(image.convert("RGBA"), fog)
 
-def merge_layers(layers, output_video, fps=30, blur_amount=0, fog_amount=0, blur_layers=None, fog_layers=None, progress_callback=None):
+def merge_layers(image_paths, output_video, fps, blur_amount, fog_amount, blur_layers, fog_layers, progress_callback=None):
     """
-    Merge multiple layers of images into a single video with optional blur and fog effects.
-    :param layers: List of layers (each layer is a list of image paths)
-    :param output_video: Path to the output video file
-    :param fps: Frames per second for the output video
-    :param blur_amount: Amount of blur to apply (0 = no blur)
-    :param fog_amount: Amount of fog to apply (0 = no fog)
-    :param blur_layers: List of layer indices to apply blur effect (empty for no blur)
-    :param fog_layers: List of layer indices to apply fog effect (empty for no fog)
-    :param progress_callback: Callback function to update progress
+    Merge layers and create video with effects.
+    :param image_paths: List of layer image paths
+    :param output_video: Output video file path
+    :param fps: Frames per second
+    :param blur_amount: Amount of blur to apply
+    :param fog_amount: Amount of fog to apply
+    :param blur_layers: List of layer indices to apply blur
+    :param fog_layers: List of layer indices to apply fog
+    :param progress_callback: Callback function for progress updates
     """
-    # Ensure all layers have the same number of images
-    num_frames = max(len(layer) for layer in layers)  # Use the longest layer as the reference
-    for i in range(len(layers)):
-        if len(layers[i]) < num_frames:
-            # Pad shorter layers by repeating the last frame
-            layers[i] += [layers[i][-1]] * (num_frames - len(layers[i]))
+    temp_dir = "temp_frames"
+    os.makedirs(temp_dir, exist_ok=True)
 
-    # Get the dimensions of the first image
-    first_image = Image.open(layers[0][0])
-    width, height = first_image.size
+    try:
+        num_frames = len(image_paths[0])  # Assume same number of frames in all layers
+        frame_size = None
 
-    # Initialize video writer
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for mp4
-    video_writer = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
+        # Step 1: Merge layers and save each frame as PNG
+        for i in tqdm(range(num_frames), desc="Merging frames"):
+            merged = None
+            for layer_index, layer_paths in enumerate(image_paths):
+                frame = Image.open(layer_paths[i]).convert("RGBA")
+                
+                # Apply effects to specific layers
+                if layer_index in blur_layers and blur_amount > 0:
+                    frame = apply_blur(frame, blur_amount)
+                if layer_index in fog_layers and fog_amount > 0:
+                    frame = apply_fog(frame, fog_amount)
+                
+                if merged is None:
+                    merged = frame
+                else:
+                    merged = Image.alpha_composite(merged, frame)
 
-    total_frames = num_frames
-    for i in range(total_frames):
-        # Start with the bottom layer (Layer 1)
-        merged_image = Image.open(layers[0][i]).convert("RGBA")
+            if frame_size is None:
+                frame_size = merged.size
 
-        # Merge all layers on top
-        for layer_index, layer in enumerate(layers[1:], start=1):
-            layer_image = Image.open(layer[i]).convert("RGBA")
+            # Save frame
+            frame_path = os.path.join(temp_dir, f"frame_{i:05d}.png")
+            merged.convert("RGB").save(frame_path)
 
-            # Apply blur effect to the selected layers
-            if blur_layers and layer_index in blur_layers and blur_amount > 0:
-                layer_image = apply_blur(layer_image, blur_amount)
+            if progress_callback:
+                progress_callback((i + 1) * 100 / num_frames)
 
-            # Apply fog effect to the selected layers
-            if fog_layers and layer_index in fog_layers and fog_amount > 0:
-                layer_image = apply_fog(layer_image, fog_amount)
+        # Step 2: Use FFmpeg to create the video
+        ffmpeg_command = [
+            "ffmpeg",
+            "-y",  # Overwrite output
+            "-framerate", str(fps),
+            "-i", os.path.join(temp_dir, "frame_%05d.png"),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            output_video
+        ]
 
-            merged_image = Image.alpha_composite(merged_image, layer_image)
+        print("Running FFmpeg:", " ".join(ffmpeg_command))
+        subprocess.run(ffmpeg_command, check=True)
 
-        # Convert the merged image to BGR format for OpenCV
-        merged_image_bgr = cv2.cvtColor(np.array(merged_image), cv2.COLOR_RGBA2BGR)
+    except Exception as e:
+        raise e
 
-        # Write the frame to the video
-        video_writer.write(merged_image_bgr)
-
-        # Update progress
-        if progress_callback:
-            progress_callback((i + 1) / total_frames * 100)
-
-    # Release the video writer
-    video_writer.release()
+    finally:
+        # Clean up temporary frames
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 class PNGtoMP4App:
     def __init__(self, root):

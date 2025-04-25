@@ -1,10 +1,16 @@
 import os
-import cv2
-import numpy as np
-import time
-from PIL import Image, ImageTk, ImageFilter
+import shutil
+import subprocess
+from PIL import Image, ImageFilter, ImageTk  # Also added ImageTk since it's used in the code
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox
+from tkinter import ttk as ttk
+from tkinter import filedialog  # Add this import
+from tqdm import tqdm
+import time  # Add this for the render time calculation
+import multiprocessing
+from functools import partial
+
 
 def apply_blur(image, blur_amount):
     """
@@ -25,64 +31,78 @@ def apply_fog(image, fog_amount):
     fog = Image.new("RGBA", image.size, (255, 255, 255, fog_amount))
     return Image.alpha_composite(image.convert("RGBA"), fog)
 
-def merge_layers(layers, output_video, fps=30, blur_amount=0, fog_amount=0, blur_layers=None, fog_layers=None, progress_callback=None):
-    """
-    Merge multiple layers of images into a single video with optional blur and fog effects.
-    :param layers: List of layers (each layer is a list of image paths)
-    :param output_video: Path to the output video file
-    :param fps: Frames per second for the output video
-    :param blur_amount: Amount of blur to apply (0 = no blur)
-    :param fog_amount: Amount of fog to apply (0 = no fog)
-    :param blur_layers: List of layer indices to apply blur effect (empty for no blur)
-    :param fog_layers: List of layer indices to apply fog effect (empty for no fog)
-    :param progress_callback: Callback function to update progress
-    """
-    # Ensure all layers have the same number of images
-    num_frames = max(len(layer) for layer in layers)  # Use the longest layer as the reference
-    for i in range(len(layers)):
-        if len(layers[i]) < num_frames:
-            # Pad shorter layers by repeating the last frame
-            layers[i] += [layers[i][-1]] * (num_frames - len(layers[i]))
+def process_frame(frame_data, temp_dir, blur_layers, fog_layers, blur_amount, fog_amount):
+    """Process a single frame with the given effects"""
+    frame_index, layer_paths = frame_data
+    merged = None
+    
+    for layer_index, path in enumerate(layer_paths):
+        frame = Image.open(path).convert("RGBA")
+        
+        if layer_index in blur_layers and blur_amount > 0:
+            frame = apply_blur(frame, blur_amount)
+        if layer_index in fog_layers and fog_amount > 0:
+            frame = apply_fog(frame, fog_amount)
+        
+        if merged is None:
+            merged = frame
+        else:
+            merged = Image.alpha_composite(merged, frame)
+    
+    frame_path = os.path.join(temp_dir, f"frame_{frame_index:05d}.png")
+    merged.convert("RGB").save(frame_path)
+    return frame_index
 
-    # Get the dimensions of the first image
-    first_image = Image.open(layers[0][0])
-    width, height = first_image.size
+def merge_layers(image_paths, output_video, fps, blur_amount, fog_amount, blur_layers, fog_layers, progress_callback=None):
+    temp_dir = "temp_frames"
+    os.makedirs(temp_dir, exist_ok=True)
 
-    # Initialize video writer
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for mp4
-    video_writer = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
+    try:
+        num_frames = len(image_paths[0])
+        
+        # Prepare frame data for parallel processing
+        frame_data = []
+        for i in range(num_frames):
+            layer_paths = [layer[i] for layer in image_paths]
+            frame_data.append((i, layer_paths))
+        
+        # Use multiprocessing to process frames
+        num_processes = multiprocessing.cpu_count()
+        with multiprocessing.Pool(num_processes) as pool:
+            process_func = partial(
+                process_frame, 
+                temp_dir=temp_dir,
+                blur_layers=blur_layers,
+                fog_layers=fog_layers,
+                blur_amount=blur_amount,
+                fog_amount=fog_amount
+            )
+            
+            # Process frames in parallel with progress tracking
+            for i, _ in enumerate(pool.imap_unordered(process_func, frame_data)):
+                if progress_callback:
+                    progress_callback((i + 1) * 100 / num_frames)
 
-    total_frames = num_frames
-    for i in range(total_frames):
-        # Start with the bottom layer (Layer 1)
-        merged_image = Image.open(layers[0][i]).convert("RGBA")
+        # Step 2: Use FFmpeg to create the video
+        ffmpeg_command = [
+            "ffmpeg",
+            "-y",  # Overwrite output
+            "-framerate", str(fps),
+            "-i", os.path.join(temp_dir, "frame_%05d.png"),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            output_video
+        ]
 
-        # Merge all layers on top
-        for layer_index, layer in enumerate(layers[1:], start=1):
-            layer_image = Image.open(layer[i]).convert("RGBA")
+        print("Running FFmpeg:", " ".join(ffmpeg_command))
+        subprocess.run(ffmpeg_command, check=True)
 
-            # Apply blur effect to the selected layers
-            if blur_layers and layer_index in blur_layers and blur_amount > 0:
-                layer_image = apply_blur(layer_image, blur_amount)
+    except Exception as e:
+        raise e
 
-            # Apply fog effect to the selected layers
-            if fog_layers and layer_index in fog_layers and fog_amount > 0:
-                layer_image = apply_fog(layer_image, fog_amount)
-
-            merged_image = Image.alpha_composite(merged_image, layer_image)
-
-        # Convert the merged image to BGR format for OpenCV
-        merged_image_bgr = cv2.cvtColor(np.array(merged_image), cv2.COLOR_RGBA2BGR)
-
-        # Write the frame to the video
-        video_writer.write(merged_image_bgr)
-
-        # Update progress
-        if progress_callback:
-            progress_callback((i + 1) / total_frames * 100)
-
-    # Release the video writer
-    video_writer.release()
+    finally:
+        # Clean up temporary frames
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 class PNGtoMP4App:
     def __init__(self, root):
