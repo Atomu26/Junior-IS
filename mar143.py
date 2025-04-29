@@ -39,6 +39,7 @@ def process_frame(frame_data, temp_dir, blur_layers, fog_layers, blur_amount, fo
     for layer_index, path in enumerate(layer_paths):
         frame = Image.open(path).convert("RGBA")
         
+        # Apply effects to any selected layer (not just top layers)
         if layer_index in blur_layers and blur_amount > 0:
             frame = apply_blur(frame, blur_amount)
         if layer_index in fog_layers and fog_amount > 0:
@@ -309,9 +310,9 @@ class PNGtoMP4App:
         blur_amount = self.blur_amount.get()
         fog_amount = self.fog_amount.get()
 
-        # Get selected layers for blur and fog effects
-        blur_layers = [i for i in self.blur_layer_listbox.curselection()]
-        fog_layers = [i for i in self.fog_layer_listbox.curselection()]
+        # Get selected layers for blur and fog effects (get the actual indices)
+        blur_layers = [int(i) for i in self.blur_layer_listbox.curselection()]
+        fog_layers = [int(i) for i in self.fog_layer_listbox.curselection()]
 
         if not output_video:
             messagebox.showerror("Error", "Please specify the output video file.")
@@ -349,18 +350,24 @@ class PNGtoMP4App:
         num_frames = len(layers[0])
 
         for i in range(num_frames):
-            # Start with the bottom layer (Layer 1)
-            merged_image = Image.open(layers[0][i]).convert("RGBA")
+            # Start with the first layer
+            first_layer = Image.open(layers[0][i]).convert("RGBA")
+            
+            # Apply effects to first layer if selected
+            if 0 in blur_layers and blur_amount > 0:
+                first_layer = apply_blur(first_layer, blur_amount)
+            if 0 in fog_layers and fog_amount > 0:
+                first_layer = apply_fog(first_layer, fog_amount)
+                
+            merged_image = first_layer
 
             # Merge all layers on top
             for layer_index, layer in enumerate(layers[1:], start=1):
                 layer_image = Image.open(layer[i]).convert("RGBA")
 
-                # Apply blur effect to the selected layers
+                # Apply effects to current layer if selected
                 if layer_index in blur_layers and blur_amount > 0:
                     layer_image = apply_blur(layer_image, blur_amount)
-
-                # Apply fog effect to the selected layers
                 if layer_index in fog_layers and fog_amount > 0:
                     layer_image = apply_fog(layer_image, fog_amount)
 
